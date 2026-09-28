@@ -1,0 +1,68 @@
+name: Deploy to cluster
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Pipeline stage to run after deploying
+        type: choice
+        options: [none, ingest, clean, features, train, serving, all]
+        default: none
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Runner lives on the master VM, so the VMs never need a public IP
+    runs-on: [self-hosted, spark-master]
+    env:
+      DEPLOY_DIR: /opt/backblaze
+      STAGE: ${{ inputs.stage || 'none' }}
+      SPARK_MASTER_URL: ${{ vars.SPARK_MASTER_URL }}
+      BACKBLAZE_HDFS_ROOT: ${{ vars.BACKBLAZE_HDFS_ROOT }}
+      CLICKHOUSE_JDBC_URL: ${{ vars.CLICKHOUSE_JDBC_URL }}
+      CLICKHOUSE_USER: ${{ vars.CLICKHOUSE_USER }}
+      CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # Spark supplies pyspark itself; only the driver-side MLlib dependencies are needed
+      - name: Install driver dependencies
+        run: grep -v '^pyspark' requirements.txt | grep -v '^pytest' | python3 -m pip install --user -r /dev/stdin
+
+      - name: Copy pipeline code
+        run: |
+          mkdir -p "$DEPLOY_DIR"
+          rsync -a --delete --include='*.py' --exclude='*' src/ "$DEPLOY_DIR/"
+
+      - name: Run pipeline stage
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          set -euo pipefail
+          declare -A SCRIPTS=(
+            [ingest]=ingest_to_hdfs.py
+            [clean]=clean_normalize.py
+            [features]=feature_engineering.py
+            [train]=train_model.py
+            [serving]=serving_layer.py
+          )
+
+          run_stage() {
+            local extra=()
+            if [ "$1" = serving ]; then
+              extra=(--packages com.clickhouse:clickhouse-jdbc:0.6.3:all)
+            fi
+            # --py-files ships common.py to the worker VM, so only the master needs the code
+            spark-submit --master "$SPARK_MASTER_URL" --py-files common.py "${extra[@]}" "${SCRIPTS[$1]}"
+          }
+
+          case "$STAGE" in
+            none) echo "Code deployed; no stage requested" ;;
+            all) for stage in ingest clean features train serving; do run_stage "$stage"; done ;;
+            *) run_stage "$STAGE" ;;
+          esac

@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # No test suite in this repo, so verify every pipeline module imports cleanly
+      - run: python -c "import common, ingest_to_hdfs, clean_normalize, feature_engineering, train_model, serving_layer"
+        working-directory: src
