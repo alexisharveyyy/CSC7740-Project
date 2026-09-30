@@ -23,6 +23,8 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      # No test suite in this repo, so verify every pipeline module imports cleanly
-      - run: python -c "import common, ingest_to_hdfs, clean_normalize, feature_engineering, train_model, serving_layer"
+      # Catches import errors in modules the tests don't cover
+      - run: python -c "import common, clickhouse, ingest_to_hdfs, clean_normalize, feature_engineering, train_model, serving_layer, load_model_tables, stream_anomaly_scores"
         working-directory: src
+
+      - run: pytest tests

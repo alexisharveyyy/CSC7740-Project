@@ -11,14 +11,22 @@ A PySpark pipeline that predicts hard drive failures from Backblaze SMART teleme
 | 3 | `src/feature_engineering.py` | Builds model features |
 | 4 | `src/train_model.py` | Trains and evaluates the failure classifier |
 | 5 | `src/serving_layer.py` | Loads reporting tables into ClickHouse |
+| 6 | `src/load_model_tables.py` | Loads model predictions and evaluation into ClickHouse |
+| 7 | `src/stream_anomaly_scores.py` | Streams anomaly scores into ClickHouse (`--once` drains and exits) |
 
-`src/common.py` holds the shared paths, schema, and helper functions.
+`src/common.py` holds the shared paths, schema, and helper functions. `src/clickhouse.py` holds the ClickHouse helpers.
 
 ## Setup
 
+Requires Java 17 for Spark. If your system Python blocks `pip install` (e.g. Homebrew), use a venv (`.venv/` is gitignored):
+
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+Run tests with `pytest tests`.
 
 ## Running a Step
 

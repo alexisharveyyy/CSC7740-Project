@@ -10,7 +10,7 @@ on:
       stage:
         description: Pipeline stage to run after deploying
         type: choice
-        options: [none, ingest, clean, features, train, serving, all]
+        options: [none, ingest, clean, features, train, serving, model_tables, stream, all]
         default: none
 
 jobs:
@@ -50,19 +50,25 @@ jobs:
             [features]=feature_engineering.py
             [train]=train_model.py
             [serving]=serving_layer.py
+            [model_tables]=load_model_tables.py
+            [stream]=stream_anomaly_scores.py
           )
 
           run_stage() {
-            local extra=()
-            if [ "$1" = serving ]; then
-              extra=(--packages com.clickhouse:clickhouse-jdbc:0.6.3:all)
+            local extra=() args=()
+            case "$1" in
+              serving|model_tables|stream) extra=(--packages com.clickhouse:clickhouse-jdbc:0.6.3:all) ;;
+            esac
+            # Drain what has landed and exit instead of streaming forever
+            if [ "$1" = stream ]; then
+              args=(--once)
             fi
             # --py-files ships common.py to the worker VM, so only the master needs the code
-            spark-submit --master "$SPARK_MASTER_URL" --py-files common.py "${extra[@]}" "${SCRIPTS[$1]}"
+            spark-submit --master "$SPARK_MASTER_URL" --py-files common.py "${extra[@]}" "${SCRIPTS[$1]}" "${args[@]}"
           }
 
           case "$STAGE" in
             none) echo "Code deployed; no stage requested" ;;
-            all) for stage in ingest clean features train serving; do run_stage "$stage"; done ;;
+            all) for stage in ingest clean features train serving model_tables stream; do run_stage "$stage"; done ;;
             *) run_stage "$STAGE" ;;
           esac
