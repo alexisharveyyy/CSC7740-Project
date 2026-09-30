@@ -26,7 +26,20 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Run tests with `pytest tests`.
+## Running Tests
+
+```bash
+pytest tests
+```
+
+On Windows, use Python 3.9–3.11 (PySpark 3.5 does not support newer versions) and point Spark at the venv's Python, since plain `python` opens the Microsoft Store alias:
+
+```powershell
+py -3.9 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PYSPARK_PYTHON = (Resolve-Path .venv\Scripts\python.exe).Path
+.venv\Scripts\python.exe -m pytest tests
+```
 
 ## Running a Step
 
