@@ -6,13 +6,13 @@
 #   scripts/run_pipeline.sh serving model_tables only the ClickHouse loads
 #   scripts/run_pipeline.sh ingest data_Q1_2026  ingest a named quarter (extra args go to the stage)
 #
-# Reads BACKBLAZE_HDFS_ROOT, CLICKHOUSE_JDBC_URL, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD from the
+# Reads BACKBLAZE_HDFS_ROOT, CLICKHOUSE_JDBC_URL, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_JDBC_JAR from the
 # environment (see .env.example). spark.master comes from spark-defaults.conf unless SPARK_MASTER_URL is set.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 src_dir="$repo_root/src"
-clickhouse_driver="com.clickhouse:clickhouse-jdbc:0.6.3:all"
+clickhouse_jar="${CLICKHOUSE_JDBC_JAR:-$HOME/jars/clickhouse-jdbc-0.6.3-all.jar}"
 
 declare -A SCRIPTS=(
   [ingest]=ingest_to_hdfs.py
@@ -30,7 +30,9 @@ run_stage() {
   local args=()
   [ -n "${SPARK_MASTER_URL:-}" ] && args+=(--master "$SPARK_MASTER_URL")
   case "$stage" in
-    serving|model_tables|stream) args+=(--packages "$clickhouse_driver") ;;
+    serving|model_tables|stream)
+      [ -f "$clickhouse_jar" ] || { echo "ClickHouse JDBC jar not found at $clickhouse_jar (see .env.example)" >&2; exit 1; }
+      args+=(--jars "$clickhouse_jar") ;;
   esac
   args+=(--py-files "$src_dir/common.py" "$src_dir/${SCRIPTS[$stage]}")
   # The stream stage drains what has landed and exits; drop --once to keep it running
